@@ -646,7 +646,7 @@ body.light-mode .kc.accent-border{border-color:var(--accent);}
         <button class="ftab" onclick="setInboxFilter('Paid',this)">Paid</button>
         <button class="ftab" onclick="setInboxFilter('Spam',this)">Spam</button>
       </div>
-      <input id="inbox-search" type="text" placeholder="Search conversations..." oninput="renderInbox()" style="width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r-sm);padding:9px 13px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;margin-bottom:10px;">
+      <input id="inbox-search" type="text" placeholder="Search conversations..." oninput="try{localStorage.setItem('cx_inbox_search',this.value);}catch(e){}renderInbox();" style="width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r-sm);padding:9px 13px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;margin-bottom:10px;">
       <div id="inbox-list"></div>
 
       <!-- Conversation thread (hidden until tapped) -->
@@ -1213,6 +1213,10 @@ function initApp(){
 function onConfigLoaded(){
   // Load credits
   fsLoadDoc('credits', function(d){ if(d) clientCredits = d; });
+
+  // Load inbox state (tags + filter) — Firebase preferred, localStorage already loaded as fallback
+  fsLoadDoc('inboxTags',   function(d){ if(d && typeof d === 'object') convoTags = d; });
+  fsLoadDoc('inboxFilter', function(d){ if(d && d.filter) inboxTagFilter = d.filter; });
 
   // Start real-time listeners for orders/expenses/tasks
   startListeners();
@@ -2809,6 +2813,7 @@ var TAG_COLORS = {
 
 function saveConvoTags(){
   try{ localStorage.setItem('cx_convo_tags', JSON.stringify(convoTags)); }catch(e){}
+  if(typeof fsSaveDoc === 'function') fsSaveDoc('inboxTags', convoTags);
 }
 
 function toggleConvoTag(tag){
@@ -2842,6 +2847,7 @@ function renderConvoTagRow(){
 function setInboxFilter(filter, btn){
   inboxTagFilter = filter;
   try{ localStorage.setItem('cx_inbox_filter', filter); }catch(e){}
+  if(typeof fsSaveDoc === 'function') fsSaveDoc('inboxFilter', {filter: filter});
   document.querySelectorAll('#inbox-filter-bar .ftab').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
   renderInbox();
@@ -2858,6 +2864,12 @@ function loadInbox(){
     var match = f.match(/'([^']+)'/);
     b.classList.toggle('on', match && match[1] === inboxTagFilter);
   });
+
+  // Restore search text from localStorage
+  var searchEl = document.getElementById('inbox-search');
+  if(searchEl && !searchEl.value){
+    try{ searchEl.value = localStorage.getItem('cx_inbox_search') || ''; }catch(e){}
+  }
 
   // If already have data just re-render (tab re-open)
   if(inboxData.length){
