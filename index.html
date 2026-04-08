@@ -2795,7 +2795,7 @@ var currentConvoId = null;
 var currentConvoName = '';
 var inboxData = [];
 var nextInboxCursor = null;
-var inboxTagFilter = 'all';
+var inboxTagFilter = (function(){ try{ return localStorage.getItem('cx_inbox_filter')||'all'; }catch(e){ return 'all'; } })();
 var convoTags = (function(){ try{ return JSON.parse(localStorage.getItem('cx_convo_tags')||'{}'); }catch(e){ return {}; } })();
 
 var INBOX_TAGS = ['Lead','Follow-up','Urgent','Paid','Spam'];
@@ -2841,6 +2841,7 @@ function renderConvoTagRow(){
 
 function setInboxFilter(filter, btn){
   inboxTagFilter = filter;
+  try{ localStorage.setItem('cx_inbox_filter', filter); }catch(e){}
   document.querySelectorAll('#inbox-filter-bar .ftab').forEach(function(b){ b.classList.remove('on'); });
   if(btn) btn.classList.add('on');
   renderInbox();
@@ -2850,6 +2851,13 @@ function loadInbox(){
   var el     = document.getElementById('inbox-list');
   var status = document.getElementById('inbox-status');
   if(!el) return;
+
+  // Sync filter bar button to persisted filter
+  document.querySelectorAll('#inbox-filter-bar .ftab').forEach(function(b){
+    var f = b.getAttribute('onclick') || '';
+    var match = f.match(/'([^']+)'/);
+    b.classList.toggle('on', match && match[1] === inboxTagFilter);
+  });
 
   // If already have data just re-render (tab re-open)
   if(inboxData.length){
