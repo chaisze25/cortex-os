@@ -1780,7 +1780,7 @@ function go(id, btn){
   document.getElementById('s-' + id).classList.add('active');
   if(btn) btn.classList.add('active');
   // Sync sidebar active state
-  var screenOrder = ['dashboard','orders','calendar','retention','expenses','team','reports','settings'];
+  var screenOrder = ['dashboard','orders','calendar','retention','expenses','messages','reports','settings'];
   var idx = screenOrder.indexOf(id);
   if(idx >= 0) setSb(idx);
   refresh();
@@ -2788,6 +2788,13 @@ function loadInbox(){
   var el     = document.getElementById('inbox-list');
   var status = document.getElementById('inbox-status');
   if(!el) return;
+
+  // If already have data just re-render, no need to re-fetch
+  if(inboxData.length){
+    renderInbox();
+    return;
+  }
+
   el.innerHTML = '<div class="empty">Loading conversations...</div>';
   if(status) status.textContent = 'Fetching from Facebook...';
 
