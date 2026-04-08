@@ -1082,14 +1082,23 @@ function initFirebase(){
         initApp();
         // Non-blocking: load role then apply visibility
         try{
+          var OWNER_EMAILS = ['lorddave1513@gmail.com', 'arlydaleporazo@gmail.com'];
           var userRef = db.collection('tenants').doc('labaluxe').collection('users').doc(user.uid);
           userRef.get().then(function(doc){
             if(doc.exists){
               var data = doc.data();
-              if(data.role) currentUserRole = data.role;
+              var role = data.role;
+              // Upgrade known owner emails if role is missing or still default
+              if(OWNER_EMAILS.indexOf(user.email) >= 0 && (!role || role === 'user')){
+                role = 'owner';
+                userRef.update({ role: 'owner' }).catch(function(){});
+              }
+              if(role) currentUserRole = role;
             } else {
-              // New user — create record with default role
-              userRef.set({ uid: user.uid, email: user.email, role: 'user', createdAt: new Date().toISOString() }).catch(function(){});
+              // New user — owner emails get owner role, everyone else gets staff
+              var newRole = OWNER_EMAILS.indexOf(user.email) >= 0 ? 'owner' : 'staff';
+              userRef.set({ uid: user.uid, email: user.email, role: newRole, createdAt: new Date().toISOString() }).catch(function(){});
+              currentUserRole = newRole;
             }
             applyRoleVisibility();
           }).catch(function(){ applyRoleVisibility(); });
