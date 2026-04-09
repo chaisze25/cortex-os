@@ -1531,15 +1531,15 @@ function getPendingVIPs(){
 }
 
 function approveVIP(name){
-  vipClients[name] = { status:'active', since: new Date().toISOString().slice(0,10), referrals:0, freeRushUsed:'' };
+  vipClients[name] = { status:'active', since: new Date().toISOString().slice(0,10), referrals:0, freeRushUsed:'', pendingReferralDiscounts:0 };
   if(!clientCredits[name]) clientCredits[name] = [];
-  fsSaveDoc('vipClients', vipClients); saveCredits(); renderRetention(); renderVIPSection(); checkNotif();
+  fsSaveDoc('vipClients', vipClients); saveCredits(); renderRetention(); renderVIPSection(); checkNotif(); updateReferrerDropdown();
   toast(name + ' is now VIP!');
 }
 
 function revokeVIP(name){
   if(vipClients[name]) vipClients[name].status = 'revoked';
-  fsSaveDoc('vipClients', vipClients); renderRetention(); renderVIPSection(); checkNotif();
+  fsSaveDoc('vipClients', vipClients); renderRetention(); renderVIPSection(); checkNotif(); updateReferrerDropdown();
   toast(name + ' VIP revoked');
 }
 
@@ -1833,19 +1833,16 @@ function handleClientKey(e){
 function updateReferrerDropdown(){
   var sel = document.getElementById('o-referrer');
   if(!sel) return;
-  // Build unique client list from orders
-  var seen = {};
-  var clients = [];
-  orders.forEach(function(o){
-    if(!seen[o.name]){ seen[o.name]=true; clients.push(o.name); }
-  });
-  clients.sort();
+  var current = sel.value || '';
+  var vipNames = Object.keys(vipClients || {})
+    .filter(function(name){ return vipClients[name] && vipClients[name].status === 'active'; })
+    .sort(function(a,b){ return a.localeCompare(b); });
   var opts = '<option value="">No referral</option>';
-  clients.forEach(function(name){
-    var vipTag = isVIP(name) ? ' (VIP)' : '';
-    opts += '<option value="' + name + '">' + name + vipTag + '</option>';
+  vipNames.forEach(function(name){
+    opts += '<option value="' + name + '">' + name + ' (VIP)</option>';
   });
   sel.innerHTML = opts;
+  if(current && vipNames.indexOf(current) >= 0) sel.value = current;
 }
 
 function checkReferral(sel){
