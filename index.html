@@ -507,7 +507,7 @@ body.light-mode .kc.accent-border{border-color:var(--accent);}
       </div>
       <div class="field"><label>Special instructions</label><textarea id="o-notes" placeholder="e.g. Use unscented detergent, fold shirts only, separate whites..."></textarea></div>
       <div class="field">
-        <label>Referred by <span id="referral-badge" style="display:none;font-size:10px;background:#7fd6a020;color:var(--accent);padding:2px 8px;border-radius:10px;font-weight:600;margin-left:6px;">-&#8369;20 VIP referral</span></label>
+        <label>Referred by <span id="referral-badge" style="display:none;font-size:10px;background:#7fd6a020;color:var(--accent);padding:2px 8px;border-radius:10px;font-weight:600;margin-left:6px;">New client gets -&#8369;20 · VIP earns +1 reward</span></label>
         <select id="o-referrer" onchange="checkReferral(this)" style="width:100%;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r-sm);padding:10px 13px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;">
           <option value="">No referral</option>
         </select>
@@ -1850,28 +1850,42 @@ function updateReferrerDropdown(){
 
 function checkReferral(sel){
   var badge = document.getElementById('referral-badge');
-  var name = sel.value;
   if(!badge) return;
-  if(name && isVIP(name)){
-    badge.style.display = 'inline';
-    calc(); // recalc to show discount
-  } else {
-    badge.style.display = 'none';
-    calc();
-  }
+  var referrer = sel.value;
+  var clientName = (document.getElementById('o-name').value || '').trim();
+  var eligible = referrer
+    && isVIP(referrer)
+    && referrer !== clientName
+    && orders.filter(function(o){ return o.name === clientName; }).length === 0;
+  badge.style.display = (referrer && isVIP(referrer)) ? 'inline' : 'none';
+  badge.textContent   = eligible
+    ? 'New client gets -\u20b120 \u00b7 VIP earns +1 reward'
+    : (!clientName || orders.filter(function(o){ return o.name === clientName; }).length > 0)
+      ? 'Client already exists \u2014 no discount'
+      : referrer === clientName ? 'Self-referral \u2014 no discount' : 'New client gets -\u20b120 \u00b7 VIP earns +1 reward';
+  badge.style.color   = eligible ? 'var(--accent)' : 'var(--muted)';
+  calc();
+}
+
+// Returns ₱20 if the CLIENT placing this order has pending referral rewards (earned by referring others)
+function getPendingReferralDiscount(clientName){
+  if(!clientName) return 0;
+  if(!isVIP(clientName)) return 0;
+  var pending = (vipClients[clientName] && vipClients[clientName].pendingReferralDiscounts) || 0;
+  return pending > 0 ? (vipSettings.referralReward || 20) : 0;
 }
 
 function getReferralDiscount(){
   var sel = document.getElementById('o-referrer');
   if(!sel || !sel.value) return 0;
   var referrer = sel.value;
-  // Only apply discount if referrer is active VIP
-  if(!isVIP(referrer)) return 0;
-  // Only apply on first order for this client
   var clientName = (document.getElementById('o-name').value || '').trim();
   if(!clientName) return 0;
+  // Safeguards: referrer must be active VIP, not self-referral, client must be first-time
+  if(!isVIP(referrer)) return 0;
+  if(referrer === clientName) return 0;
   var existingOrders = orders.filter(function(o){ return o.name === clientName; }).length;
-  if(existingOrders > 0) return 0; // not first order
+  if(existingOrders > 0) return 0;
   return vipSettings.referralReward || 20;
 }
 
@@ -1944,7 +1958,9 @@ function calc(){
   var clientNameForCredit = (document.getElementById('o-name').value || '').trim();
   var nextCred = clientNameForCredit ? getNextCredit(clientNameForCredit) : null;
   var creditAmt = nextCred ? nextCred.amount : 0;
-  var total = Math.max(0, ca + sa + coa + (rush ? rushFeeActual : 0) - referralDiscount - creditAmt);
+  // Check if client has pending referral rewards (earned by referring others)
+  var pendingRefDiscount = getPendingReferralDiscount(clientName);
+  var total = Math.max(0, ca + sa + coa + (rush ? rushFeeActual : 0) - referralDiscount - creditAmt - pendingRefDiscount);
   document.getElementById('calc-total').textContent = '\u20b1' + total.toLocaleString();
   var parts = [];
   if(ca)   parts.push('Clothes \u20b1' + ca);
@@ -1955,8 +1971,9 @@ function calc(){
     else parts.push('Rush +\u20b1' + (pricing.rushFee || 50));
   }
   if(isVIP(clientName)) parts.push('VIP rate applied');
-  if(creditAmt > 0) parts.push('Credit -₱' + creditAmt);
-  if(referralDiscount > 0) parts.push('Referral -₱' + referralDiscount);
+  if(creditAmt > 0) parts.push('Credit -\u20b1' + creditAmt);
+  if(referralDiscount > 0) parts.push('Referral reward -\u20b1' + referralDiscount + ' (new client)');
+  if(pendingRefDiscount > 0) parts.push('Referral reward -\u20b1' + pendingRefDiscount + ' (your reward)');
   document.getElementById('calc-break').textContent = parts.join(' · ') || 'Enter kg above to calculate';
   return total;
 }
@@ -2038,10 +2055,11 @@ function saveOrder(){
   if(!name || !area){ toast('Fill in name and area'); return; }
   var total = calc();
   if(!total){ toast('Add at least one item'); return; }
-  // Recalculate creditAmt in saveOrder scope so it's available below
+  // Recalculate creditAmt and pendingRefDiscount in saveOrder scope
   var creditClientName = (document.getElementById('o-name').value || '').trim();
   var nextCredForSave  = creditClientName ? getNextCredit(creditClientName) : null;
   var creditAmt        = nextCredForSave ? nextCredForSave.amount : 0;
+  var pendingRefDiscount = getPendingReferralDiscount(creditClientName);
   var phone    = document.getElementById('o-phone').value.trim();
   var landmark = document.getElementById('o-landmark').value.trim();
   var pay      = document.getElementById('o-pay').value;
@@ -2071,8 +2089,7 @@ function saveOrder(){
   // Do NOT push to orders locally to avoid duplication
   BASE().collection('orders').doc(String(newOrder.id)).set(newOrder)
     .catch(function(e){ console.error('Save order error:', e); toast('Error saving order'); });
-  // Save VIP/config changes
-  fsSaveDoc('vipClients', vipClients);
+  // Save credits
   fsSaveDoc('credits', clientCredits);
   // Upsert client profile with latest contact details from this order
   if(name){
@@ -2108,15 +2125,24 @@ function saveOrder(){
     BASE().collection('orders').doc(String(newOrder.id)).update({ creditApplied: creditAmt }).catch(function(){});
   }
 
-  // Credit VIP referrer
+  // Credit VIP referrer — only if this order had an eligible referral discount
   var referrerSel = document.getElementById('o-referrer');
-  if(referrerSel && referrerSel.value && isVIP(referrerSel.value)){
+  if(referrerSel && referrerSel.value && newOrder.referralDiscount > 0){
     var referrerName = referrerSel.value;
     if(vipClients[referrerName]){
+      // reporting count (for analytics)
       vipClients[referrerName].referrals = (vipClients[referrerName].referrals || 0) + 1;
+      // redeemable reward count — one per eligible referral
+      vipClients[referrerName].pendingReferralDiscounts = (vipClients[referrerName].pendingReferralDiscounts || 0) + 1;
     }
   }
+  // Consume one pending referral discount if client has rewards to use
+  if(pendingRefDiscount > 0 && vipClients[name]){
+    vipClients[name].pendingReferralDiscounts = Math.max(0, (vipClients[name].pendingReferralDiscounts || 0) - 1);
+    BASE().collection('orders').doc(String(newOrder.id)).update({ pendingRefDiscountApplied: pendingRefDiscount }).catch(function(){});
+  }
   if(referrerSel) referrerSel.value = '';
+  fsSaveDoc('vipClients', vipClients);
   var refBadge = document.getElementById('referral-badge');
   if(refBadge) refBadge.style.display = 'none';
 
