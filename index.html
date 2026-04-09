@@ -778,15 +778,7 @@ body.light-mode .kc.accent-border{border-color:var(--accent);}
 
       <div class="sec">Pricing rules</div>
       <div class="card">
-        <div class="field"><label>Clothes — base load (kg)</label><input type="number" id="st-clothes-kg" placeholder="7" step="0.5"></div>
-        <div class="field"><label>Clothes — base price (₱)</label><input type="number" id="st-clothes-price" placeholder="159"></div>
-        <div class="field"><label>Clothes — excess per kg (₱)</label><input type="number" id="st-clothes-excess" placeholder="25"></div>
-        <div style="height:1px;background:var(--border);margin:4px 0 12px;"></div>
-        <div class="field"><label>Sheets — base load (kg)</label><input type="number" id="st-sheets-kg" placeholder="5" step="0.5"></div>
-        <div class="field"><label>Sheets — base price (₱)</label><input type="number" id="st-sheets-price" placeholder="159"></div>
-        <div class="field"><label>Sheets — excess per kg (₱)</label><input type="number" id="st-sheets-excess" placeholder="35"></div>
-        <div style="height:1px;background:var(--border);margin:4px 0 12px;"></div>
-        <div class="field"><label>Comforter — price per piece (₱)</label><input type="number" id="st-comforter-price" placeholder="159"></div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Service pricing (Clothes, Sheets, Comforter) is managed in the Services section above.</div>
         <div class="field"><label>Rush fee (₱)</label><input type="number" id="st-rush-fee" placeholder="50"></div>
         <button class="btn" onclick="savePricing()">Save pricing</button>
       </div>
@@ -1363,9 +1355,8 @@ var sampleExpenses = [
 
 // SETTINGS & PRICING
 const DEFAULT_PRICING = {
-  clothesKg:7, clothesPrice:159, clothesExcess:25,
-  sheetsKg:5,  sheetsPrice:159,  sheetsExcess:35,
-  comforterPrice:159, rushFee:50
+  rushFee: 50
+  // Clothes, Sheets, Comforter pricing now live in DEFAULT_SERVICES / services array
 };
 const DEFAULT_BIZ = { name:'LabaLuxe', dailyTarget:5000 };
 const DEFAULT_VIP = {
@@ -1390,14 +1381,7 @@ let serviceAreas = load('cx_areas')   || DEFAULT_AREAS.slice();
 
 function savePricing(){
   pricing = {
-    clothesKg:     parseFloat(document.getElementById('st-clothes-kg').value)     || DEFAULT_PRICING.clothesKg,
-    clothesPrice:  parseFloat(document.getElementById('st-clothes-price').value)  || DEFAULT_PRICING.clothesPrice,
-    clothesExcess: parseFloat(document.getElementById('st-clothes-excess').value) || DEFAULT_PRICING.clothesExcess,
-    sheetsKg:      parseFloat(document.getElementById('st-sheets-kg').value)      || DEFAULT_PRICING.sheetsKg,
-    sheetsPrice:   parseFloat(document.getElementById('st-sheets-price').value)   || DEFAULT_PRICING.sheetsPrice,
-    sheetsExcess:  parseFloat(document.getElementById('st-sheets-excess').value)  || DEFAULT_PRICING.sheetsExcess,
-    comforterPrice:parseFloat(document.getElementById('st-comforter-price').value)|| DEFAULT_PRICING.comforterPrice,
-    rushFee:       parseFloat(document.getElementById('st-rush-fee').value)       || DEFAULT_PRICING.rushFee,
+    rushFee: parseFloat(document.getElementById('st-rush-fee').value) || 50,
   };
   fsSaveDoc('pricing', pricing);
   renderPricingSummary();
@@ -1463,11 +1447,17 @@ function renderAreasList(){
 function renderPricingSummary(){
   var el = document.getElementById('st-pricing-summary');
   if(!el) return;
+  var rows = services.filter(function(s){ return s.active; }).map(function(svc){
+    var detail = svc.type === 'kg'
+      ? '&#8369;' + svc.basePrice + ' / ' + svc.baseKg + 'kg &middot; +&#8369;' + svc.excess + '/kg excess'
+      : svc.type === 'piece'
+      ? '&#8369;' + svc.piecePrice + ' / piece'
+      : '&#8369;' + svc.fixedPrice + ' / order';
+    return '<div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);">' + svc.name + '</span><span>' + detail + '</span></div>';
+  }).join('');
   el.innerHTML = '<div style="display:flex;flex-direction:column;gap:7px;font-size:13px;">'
-    + '<div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);">Clothes</span><span>&#8369;' + pricing.clothesPrice + ' / ' + pricing.clothesKg + 'kg &middot; +&#8369;' + pricing.clothesExcess + '/kg excess</span></div>'
-    + '<div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);">Sheets</span><span>&#8369;' + pricing.sheetsPrice + ' / ' + pricing.sheetsKg + 'kg &middot; +&#8369;' + pricing.sheetsExcess + '/kg excess</span></div>'
-    + '<div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);">Comforter</span><span>&#8369;' + pricing.comforterPrice + ' / piece</span></div>'
-    + '<div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);">Rush fee</span><span>+&#8369;' + pricing.rushFee + '</span></div>'
+    + rows
+    + '<div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);">Rush fee</span><span>+&#8369;' + (pricing.rushFee || 50) + '</span></div>'
     + '<div style="height:1px;background:var(--border);"></div>'
     + '<div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);">Daily target</span><span style="color:var(--accent);">&#8369;' + bizSettings.dailyTarget.toLocaleString() + '</span></div>'
     + '</div>';
@@ -1476,14 +1466,7 @@ function renderPricingSummary(){
 function loadSettingsForm(){
   // Sync notification sound toggle
   setNotifSound(notifSoundEnabled);
-  document.getElementById('st-clothes-kg').value     = pricing.clothesKg;
-  document.getElementById('st-clothes-price').value  = pricing.clothesPrice;
-  document.getElementById('st-clothes-excess').value = pricing.clothesExcess;
-  document.getElementById('st-sheets-kg').value      = pricing.sheetsKg;
-  document.getElementById('st-sheets-price').value   = pricing.sheetsPrice;
-  document.getElementById('st-sheets-excess').value  = pricing.sheetsExcess;
-  document.getElementById('st-comforter-price').value= pricing.comforterPrice;
-  document.getElementById('st-rush-fee').value       = pricing.rushFee;
+  document.getElementById('st-rush-fee').value       = pricing.rushFee || 50;
   document.getElementById('st-biz-name').value       = bizSettings.name;
   document.getElementById('st-daily-target').value   = bizSettings.dailyTarget;
   renderAreasList();
@@ -1565,7 +1548,8 @@ function canUseFreeRush(name){
 
 function getVIPPrice(name){
   if(isVIP(name)) return vipSettings.lockedRate;
-  return pricing.clothesPrice;
+  var clothes = getSvcPricing('clothes');
+  return clothes ? clothes.basePrice : 159;
 }
 
 function renderVIPSection(){
@@ -1924,12 +1908,18 @@ function calc(){
 
   var rush = document.getElementById('o-rush').value === 'yes';
   var clientName = (document.getElementById('o-name').value || '').trim();
-  var baseClothesPrice = isVIP(clientName) ? vipSettings.lockedRate : pricing.clothesPrice;
-  var baseSheetsPrice  = isVIP(clientName) ? vipSettings.lockedRate : pricing.sheetsPrice;
-  var rushFeeActual    = (isVIP(clientName) && canUseFreeRush(clientName)) ? 0 : pricing.rushFee;
-  var ca  = Math.floor(cl / pricing.clothesKg) * baseClothesPrice + (cl % pricing.clothesKg) * pricing.clothesExcess;
-  var sa  = Math.floor(sh / pricing.sheetsKg)  * baseSheetsPrice  + (sh % pricing.sheetsKg)  * pricing.sheetsExcess;
-  var coa = com * pricing.comforterPrice;
+
+  // Read pricing from services — single source of truth
+  var clothesSvcP = getSvcPricing('clothes') || {basePrice:159, baseKg:7, excess:25};
+  var sheetsSvcP  = getSvcPricing('sheets')  || {basePrice:159, baseKg:5, excess:35};
+  var comfSvcP    = getSvcPricing('comforter')|| {piecePrice:159};
+
+  var baseClothesPrice = isVIP(clientName) ? vipSettings.lockedRate : clothesSvcP.basePrice;
+  var baseSheetsPrice  = isVIP(clientName) ? vipSettings.lockedRate : sheetsSvcP.basePrice;
+  var rushFeeActual    = (isVIP(clientName) && canUseFreeRush(clientName)) ? 0 : (pricing.rushFee || 50);
+  var ca  = Math.floor(cl / clothesSvcP.baseKg) * baseClothesPrice + (cl % clothesSvcP.baseKg) * clothesSvcP.excess;
+  var sa  = Math.floor(sh / sheetsSvcP.baseKg)  * baseSheetsPrice  + (sh % sheetsSvcP.baseKg)  * sheetsSvcP.excess;
+  var coa = com * (comfSvcP.piecePrice || 159);
   var referralDiscount = getReferralDiscount();
   var clientNameForCredit = (document.getElementById('o-name').value || '').trim();
   var nextCred = clientNameForCredit ? getNextCredit(clientNameForCredit) : null;
@@ -1942,7 +1932,7 @@ function calc(){
   if(coa)  parts.push('Comforter \u20b1' + coa);
   if(rush){
     if(rushFeeActual === 0) parts.push('Rush FREE (VIP)');
-    else parts.push('Rush +\u20b1' + pricing.rushFee);
+    else parts.push('Rush +\u20b1' + (pricing.rushFee || 50));
   }
   if(isVIP(clientName)) parts.push('VIP rate applied');
   if(creditAmt > 0) parts.push('Credit -₱' + creditAmt);
@@ -2333,12 +2323,15 @@ function calcEdit(){
   var rush = document.getElementById('edit-rush').value === 'yes';
   if(!cl && !sh && !com){ return null; }
   var name = document.getElementById('edit-name').value.trim();
-  var baseC = isVIP(name) ? vipSettings.lockedRate : pricing.clothesPrice;
-  var baseS = isVIP(name) ? vipSettings.lockedRate : pricing.sheetsPrice;
-  var rushFee = (isVIP(name) && canUseFreeRush(name)) ? 0 : pricing.rushFee;
-  var ca  = Math.floor(cl/pricing.clothesKg)*baseC + (cl%pricing.clothesKg)*pricing.clothesExcess;
-  var sa  = Math.floor(sh/pricing.sheetsKg)*baseS  + (sh%pricing.sheetsKg)*pricing.sheetsExcess;
-  var coa = com * pricing.comforterPrice;
+  var clothesSvcE = getSvcPricing('clothes') || {basePrice:159, baseKg:7, excess:25};
+  var sheetsSvcE  = getSvcPricing('sheets')  || {basePrice:159, baseKg:5, excess:35};
+  var comfSvcE    = getSvcPricing('comforter')|| {piecePrice:159};
+  var baseC   = isVIP(name) ? vipSettings.lockedRate : clothesSvcE.basePrice;
+  var baseS   = isVIP(name) ? vipSettings.lockedRate : sheetsSvcE.basePrice;
+  var rushFee = (isVIP(name) && canUseFreeRush(name)) ? 0 : (pricing.rushFee || 50);
+  var ca  = Math.floor(cl/clothesSvcE.baseKg)*baseC + (cl%clothesSvcE.baseKg)*clothesSvcE.excess;
+  var sa  = Math.floor(sh/sheetsSvcE.baseKg)*baseS  + (sh%sheetsSvcE.baseKg)*sheetsSvcE.excess;
+  var coa = com * (comfSvcE.piecePrice || 159);
   var total = ca + sa + coa + (rush ? rushFee : 0);
   document.getElementById('edit-total').textContent = '₱' + total.toLocaleString();
   var parts = [];
@@ -2575,6 +2568,11 @@ var DEFAULT_SERVICES = [
 ];
 
 var services = load('cx_services') || DEFAULT_SERVICES.map(function(s){ return Object.assign({},s); });
+
+// Helper: get pricing fields from services array by id
+function getSvcPricing(id){
+  return services.find(function(s){ return s.id === id; }) || null;
+}
 var editingServiceId = null;
 
 // saveServices() handled by Firebase
