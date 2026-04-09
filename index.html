@@ -931,6 +931,20 @@ body.light-mode .kc.accent-border{border-color:var(--accent);}
 
   <!-- CREDIT MODAL -->
   <div class="modal-bg" id="credit-modal-bg" onclick="closeCreditModal(event)">
+
+  <!-- EDIT CLIENT MODAL -->
+  <div class="modal-bg" id="edit-client-modal-bg" onclick="closeEditClientModal(event)">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <div class="modal-title">Edit client — <span id="edit-client-name-title"></span></div>
+      <div class="field"><label>Phone number</label><input type="tel" id="ec-phone" placeholder="09xx xxx xxxx"></div>
+      <div class="field"><label>Area / Barangay</label><input type="text" id="ec-area" placeholder="e.g. Punta, Camp Downes..."></div>
+      <div class="field"><label>Landmark / Address</label><input type="text" id="ec-landmark" placeholder="e.g. Blue gate, near sari-sari store..."></div>
+      <div class="field"><label>Internal notes</label><textarea id="ec-notes" placeholder="e.g. Uses unscented detergent, call before pickup..." style="height:72px;resize:none;"></textarea></div>
+      <button class="btn" onclick="saveClientProfile()">Save profile</button>
+      <button class="btn-ghost" onclick="closeEditClientModal()">Cancel</button>
+    </div>
+  </div>
     <div class="modal" id="credit-modal-content">
       <div class="modal-handle"></div>
       <div class="modal-title">Add credit for <span id="credit-client-name"></span></div>
@@ -1286,6 +1300,12 @@ function initApp(){
 function onConfigLoaded(){
   // Load credits
   fsLoadDoc('credits', function(d){ if(d) clientCredits = d; });
+
+  // Load client profiles
+  BASE().collection('clients').get()
+    .then(function(snap){
+      snap.forEach(function(doc){ clientProfiles[doc.id] = doc.data(); });
+    }).catch(function(){});
 
   // Load inbox state (tags + filter) — Firebase preferred, localStorage already loaded as fallback
   fsLoadDoc('inboxTags',   function(d){ if(d && typeof d === 'object') convoTags = d; });
@@ -2054,6 +2074,20 @@ function saveOrder(){
   // Save VIP/config changes
   fsSaveDoc('vipClients', vipClients);
   fsSaveDoc('credits', clientCredits);
+  // Upsert client profile with latest contact details from this order
+  if(name){
+    var existingProfile = clientProfiles[name] || {};
+    var updatedProfile = Object.assign({}, existingProfile, {
+      name: name,
+      phone:    phone    || existingProfile.phone    || '',
+      area:     area     || existingProfile.area     || '',
+      landmark: landmark || existingProfile.landmark || '',
+      notes:    existingProfile.notes || '',
+      updatedAt: new Date().toISOString()
+    });
+    clientProfiles[name] = updatedProfile;
+    BASE().collection('clients').doc(name).set(updatedProfile).catch(function(){});
+  }
   // Send referral welcome SMS if applicable
   var referrerSelCheck = document.getElementById('o-referrer');
   if(referrerSelCheck && referrerSelCheck.value && isVIP(referrerSelCheck.value)){
@@ -2388,6 +2422,21 @@ function openClientModal(name){
 
   var html = '<div class="modal-title">' + name
     + (vipStatus ? ' <span style="font-size:11px;background:#f0a86422;color:var(--accent2);padding:2px 8px;border-radius:10px;font-weight:700;">VIP</span>' : '')
+    + '<button class="btn-sm" style="float:right;font-size:11px;" data-action="edit-profile" data-name="' + name + '">✏️ Edit profile</button>'
+    + '</div>';
+
+  // Profile details — from clientProfiles first, fall back to order data
+  var p  = getClientProfile(name);
+  var cl = buildClients().find(function(c){ return c.name === name; }) || {};
+  var phone    = (p && p.phone)    || cl.phone    || '';
+  var area     = (p && p.area)     || cl.area     || '';
+  var landmark = (p && p.landmark) || '';
+  var notes    = (p && p.notes)    || '';
+  html += '<div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;">'
+    + (phone    ? '<div style="margin-bottom:4px;"><span style="color:var(--muted);">📞 </span>' + phone + '</div>' : '')
+    + (area     ? '<div style="margin-bottom:4px;"><span style="color:var(--muted);">📍 </span>' + area + (landmark ? ' · ' + landmark : '') + '</div>' : '')
+    + (notes    ? '<div style="color:var(--accent2);margin-top:4px;">📝 ' + notes + '</div>' : '')
+    + (!phone && !area ? '<div style="color:var(--muted);">No profile yet — tap ✏️ Edit profile to add details.</div>' : '')
     + '</div>';
 
   // Summary strip
@@ -2441,6 +2490,10 @@ function openClientModal(name){
   document.getElementById('client-modal-body').querySelectorAll('[data-action]').forEach(function(btn){
     btn.addEventListener('click', function(){
       var action = this.getAttribute('data-action');
+      if(action === 'edit-profile'){
+        closeClientModal();
+        openEditClientModal(this.getAttribute('data-name'));
+      }
       if(action === 'revoke-vip'){
         revokeVIP(this.getAttribute('data-name'));
         closeClientModal();
@@ -2457,6 +2510,50 @@ function openClientModal(name){
 function closeClientModal(e){
   if(!e || e.target === document.getElementById('client-modal-bg'))
     document.getElementById('client-modal-bg').classList.remove('open');
+}
+
+// ── CLIENT PROFILES ───────────────────────────────────────────
+function openEditClientModal(name){
+  document.getElementById('edit-client-name-title').textContent = name;
+  document.getElementById('edit-client-modal-bg').setAttribute('data-client', name);
+  var p = clientProfiles[name] || {};
+  // Fall back to latest order data if no profile yet
+  var cl = buildClients().find(function(c){ return c.name === name; }) || {};
+  document.getElementById('ec-phone').value    = p.phone    || cl.phone    || '';
+  document.getElementById('ec-area').value     = p.area     || cl.area     || '';
+  document.getElementById('ec-landmark').value = p.landmark || '';
+  document.getElementById('ec-notes').value    = p.notes    || '';
+  document.getElementById('edit-client-modal-bg').classList.add('open');
+}
+
+function saveClientProfile(){
+  var modal = document.getElementById('edit-client-modal-bg');
+  var name  = modal.getAttribute('data-client');
+  if(!name) return;
+  var profile = {
+    name:     name,
+    phone:    document.getElementById('ec-phone').value.trim(),
+    area:     document.getElementById('ec-area').value.trim(),
+    landmark: document.getElementById('ec-landmark').value.trim(),
+    notes:    document.getElementById('ec-notes').value.trim(),
+    updatedAt: new Date().toISOString()
+  };
+  clientProfiles[name] = profile;
+  // Save to Firestore clients collection keyed by name
+  BASE().collection('clients').doc(name).set(profile)
+    .catch(function(e){ console.error('saveClientProfile error:', e); });
+  closeEditClientModal();
+  renderRetention();
+  toast('Profile saved for ' + name + '!');
+}
+
+function closeEditClientModal(e){
+  if(!e || e.target === document.getElementById('edit-client-modal-bg'))
+    document.getElementById('edit-client-modal-bg').classList.remove('open');
+}
+
+function getClientProfile(name){
+  return clientProfiles[name] || null;
 }
 
 
@@ -2487,7 +2584,8 @@ function loadTheme(){
 
 
 // CREDIT SYSTEM
-var clientCredits = load('cx_credits') || {};
+var clientCredits  = load('cx_credits') || {};
+var clientProfiles = {}; // loaded from Firestore clients collection
 
 // saveCredits() handled by Firebase
 
@@ -3811,8 +3909,11 @@ function renderRetention(){
   if(!list.length){ el.innerHTML = '<div class="empty" style="padding:20px 0;">' + (clients.length ? 'No clients match this filter.' : 'Add orders to see client data here.') + '</div>'; return; }
   el.innerHTML = list.map(function(cl){
     var smsBody = encodeURIComponent('Hi ' + cl.name + '! Kumusta? Dugay na ta wala nag-laundry together! \u{1F60A} Book na and we\'ll schedule your pickup. LabaLuxe is here for you!');
+    var p = getClientProfile(cl.name);
+    var displayPhone = (p && p.phone) || cl.phone || '';
+    var displayArea  = (p && p.area)  || cl.area  || '';
     return '<div class="ret-card" onclick="openClientModal(\'' + cl.name + '\')" style="cursor:pointer;">'
-      + '<div class="ret-top"><div><div class="cname">' + cl.name + ' <span style="font-size:10px;color:var(--muted);">&#8250; history</span></div><div class="cmeta">' + cl.area + (cl.phone ? ' &middot; ' + cl.phone : '') + '</div></div>'
+      + '<div class="ret-top"><div><div class="cname">' + cl.name + ' <span style="font-size:10px;color:var(--muted);">&#8250; history</span></div><div class="cmeta">' + displayArea + (displayPhone ? ' &middot; ' + displayPhone : '') + '</div></div>'
       + '<div style="font-size:11px;font-weight:600;color:' + (cl.days>=14?'var(--danger)':'var(--muted)') + ';">' + (cl.days===0?'Today':cl.days+' days ago') + '</div></div>'
       + '<div style="display:flex;gap:14px;">'
       + '<div style="font-size:11px;color:var(--muted);">Orders: <strong style="color:var(--text);">' + cl.orders + '</strong></div>'
@@ -3821,9 +3922,10 @@ function renderRetention(){
       + '</div>'
       + (getAvailableCredit(cl.name) > 0 ? '<div style="font-size:11px;background:#7fd6a020;color:var(--accent);padding:3px 8px;border-radius:8px;margin-top:6px;display:inline-block;font-weight:600;">Credit: ₱' + getAvailableCredit(cl.name) + ' available</div>' : '')
       + '<div class="ret-actions">'
-      + '<button class="btn-sm" onclick="copyFollowUp(\'' + cl.name + '\',\'' + cl.area + '\')">Copy message</button>'
-      + (cl.phone ? '<button class="btn-sms" data-action="opensms" data-phone="' + cl.phone + '" data-body="' + smsBody + '">Open SMS</button>' : '')
+      + '<button class="btn-sm" onclick="copyFollowUp(\'' + cl.name + '\',\'' + displayArea + '\')">Copy message</button>'
+      + (displayPhone ? '<button class="btn-sms" data-action="opensms" data-phone="' + displayPhone + '" data-body="' + smsBody + '">Open SMS</button>' : '')
       + '<button class="btn-sm-ghost" data-action="add-credit" data-name="' + cl.name + '">+ Credit</button>'
+      + '<button class="btn-sm-ghost" data-action="edit-client" data-name="' + cl.name + '">✏️ Edit</button>'
       + '</div></div>';
   }).join('');
   // SMS button listener
@@ -3837,7 +3939,10 @@ function renderRetention(){
   });
   // Credit button listener
   el.querySelectorAll('[data-action="add-credit"]').forEach(function(btn){
-    btn.addEventListener('click', function(){ openAddCreditModal(this.getAttribute('data-name')); });
+    btn.addEventListener('click', function(e){ e.stopPropagation(); openAddCreditModal(this.getAttribute('data-name')); });
+  });
+  el.querySelectorAll('[data-action="edit-client"]').forEach(function(btn){
+    btn.addEventListener('click', function(e){ e.stopPropagation(); openEditClientModal(this.getAttribute('data-name')); });
   });
 }
 
