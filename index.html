@@ -3891,20 +3891,25 @@ function renderTasks(){
 // DASHBOARD
 function refreshDash(){
   var today = new Date().toDateString();
-  var todOrds = orders.filter(function(o){ return o.date === today; });
-  var todRev  = todOrds.reduce(function(a,o){ return a+o.total; }, 0);
-  var allRev  = orders.reduce(function(a,o){ return a+o.total; }, 0);
-  var allExp  = expenses.reduce(function(a,e){ return a+e.amt; }, 0);
-  var avg     = orders.length ? Math.round(allRev / orders.length) : 0;
-  var pct     = Math.min(100, Math.round(todRev / bizSettings.dailyTarget * 100));
+  var now   = new Date();
+  var thisMonth = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+
+  var todOrds   = orders.filter(function(o){ return o.date === today; });
+  var monthOrds = orders.filter(function(o){ return (o.dateISO || '').slice(0,7) === thisMonth; });
+
+  var todRev   = todOrds.reduce(function(a,o){ return a+o.total; }, 0);
+  var monthRev = monthOrds.reduce(function(a,o){ return a+o.total; }, 0);
+  var allExp   = expenses.reduce(function(a,e){ return a+e.amt; }, 0);
+  var avg      = monthOrds.length ? Math.round(monthRev / monthOrds.length) : 0;
+  var pct      = Math.min(100, Math.round(todRev / bizSettings.dailyTarget * 100));
   document.getElementById('d-today').textContent      = '\u20b1' + todRev.toLocaleString();
   document.getElementById('d-today-ct').textContent   = todOrds.length + ' order' + (todOrds.length!==1?'s':'');
   document.getElementById('d-prog').style.width        = pct + '%';
   document.getElementById('d-prog-lbl').textContent   = pct + '% of \u20b1' + bizSettings.dailyTarget.toLocaleString() + ' daily target';
-  document.getElementById('d-month').textContent      = '\u20b1' + allRev.toLocaleString();
-  document.getElementById('d-month-ct').textContent   = orders.length + ' total orders';
+  document.getElementById('d-month').textContent      = '\u20b1' + monthRev.toLocaleString();
+  document.getElementById('d-month-ct').textContent   = monthOrds.length + ' orders this month';
   document.getElementById('d-avg').textContent        = '\u20b1' + avg.toLocaleString();
-  document.getElementById('d-profit').textContent     = '\u20b1' + (allRev - allExp).toLocaleString();
+  document.getElementById('d-profit').textContent     = '\u20b1' + (monthRev - allExp).toLocaleString();
   document.getElementById('d-profit-sub').textContent = allExp ? '\u20b1' + allExp.toLocaleString() + ' in expenses' : 'Log expenses for real profit';
   var areaMap = {};
   orders.forEach(function(o){ areaMap[o.area] = (areaMap[o.area] || 0) + o.total; });
